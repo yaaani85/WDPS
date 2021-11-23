@@ -9,11 +9,22 @@ import trafilatura
 from nltk.tag import StanfordNERTagger
 from nltk.tokenize import word_tokenize
 from my_trident import MyTrident
+myTrident = MyTrident()
+
+is_entity = {"PERSON": myTrident.is_person,
+                "GPE": myTrident.is_gpe,
+                "NORP": myTrident.is_norp,
+                "FAC":myTrident.is_fac,
+                "ORG":myTrident.is_org,
+                "PRODUCT":myTrident.is_product,
+                "EVENT":myTrident.is_event,
+                "WORK_OF_ART":myTrident.is_work_of_art,
+                "LAW":myTrident.is_law,
+                "LANGUAGE":myTrident.is_language}
 
 st = StanfordNERTagger(  "/home/yannick/WDPS/assignment-code/assignment/assets/stanford-ner-2020-11-17/classifiers/english.muc.7class.distsim.crf.ser.gz",
 					   "/home/yannick/WDPS/assignment-code/assignment/assets/stanford-ner-2020-11-17/stanford-ner.jar",
 					   encoding='utf-8')
-myTrident = MyTrident()
 nlp = spacy.load("en_core_web_lg")
 result = {}
 KEYNAME = "WARC-TREC-ID"
@@ -45,29 +56,25 @@ def find_labels(payload):
         text = parse_html_to_text(html)
         #keep only unique tuples (entity, entity_type) 
         entities = set(text_to_entities(text))   
-    except Exception as e:       
+    except Exception as e:   
         # Return when error in creating HTML or entities
         return  
 
 
-
     for entity, entity_type in entities:        
-        #if entity_type is invalid, continue
+   
         if entity_type in ENTITY_BLACKLIST:
             continue
         try:
-            search_results = elastic_search(entity)       
-            intersection = filter_with_trident(search_results, entity_type)
-
-            if intersection:
-                # if match return the match
-                wikidata_id = next(iter(intersection))
-                yield key, entity, wikidata_id
-            else:
-            # if not match, return all results, score.py will take the last one
-                for wikidata_id, label in search_results:              
-                    yield key, entity, wikidata_id
+            entity = entity.capitalize() if entity.islower() else entity
+            search_results = elastic_search(entity)  
+            wikidata_id = rank_search_results(search_results, entity, entity_type)
+            yield key, entity, wikidata_id
             
+                
+                # if match return the match
+               
+        
         except Exception as e:
             continue
        
@@ -159,6 +166,11 @@ def text_to_entities(text):
     document = nlp(text)
     entities_and_type = [(token.text.replace("\n", " "), token.label_) for token in document.ents]  
 
+    # try:
+    #     capitlized = [(x.capitalize(), y)  if x.islower() else x for x,y in entities_and_type]
+    #     return capitlized
+
+    # except:
     # Stanford
     # tokenized_text = word_tokenize(text)
     # classified_text = st.tag(tokenized_text)
@@ -172,10 +184,27 @@ def elastic_search(entity):
     search_results =  search(QUERY).items()
     return search_results
 
-def filter_with_trident(search_results, entity_type):
-    candidatelist = [(wikidata_id[1:-1]) for (wikidata_id,label) in search_results]      
-    tridentResult = myTrident.query(candidatelist, entity_type)    
-    return tridentResult
+def rank_search_results(search_results, entity, entity_type):
+    ranking = []
+    for wikidata_id, label in search_results:
+        # is person/loc/ etc
+        score = 0
+
+        try:
+            if is_entity[entity_type](wikidata_id):
+                score += 1
+        except:
+            score += 0
+        
+        if label == entity:
+            score += 0.5
+        
+        ranking.append((wikidata_id, score))
+    
+    # return first one
+    sorted_ranking = sorted(ranking,key=lambda x:(-x[1],x[0]))
+    wikidata_id, _ = sorted_ranking[0]
+    return wikidata_id
 
 
 def split_records(stream):

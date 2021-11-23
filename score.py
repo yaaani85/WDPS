@@ -16,7 +16,6 @@ pred = {}
 for line in open(pred_file):
     record, string, entity = line.strip().split('\t', 2)
     pred[(record, string)] = entity
-print(pred)
 n_predicted = len(pred)
 print('predicted: %s' % n_predicted)
 
