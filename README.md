@@ -17,7 +17,7 @@ docker build . --tag=submission --load
 ```bash
 docker run -ti -v <path-to-git-submission-and-data>:/app/assignment -p 9200:9200 submission
 ```
-
+I initally planned to create a new docker image, however I could not get in my docker account. Please let me know if you prefer this, then I will fix this asap! (although above option should work fine)
 
 ## Things to consider
 The following issues are a dependent per host machine, but are nothing new to you so this should not give any issues. 
